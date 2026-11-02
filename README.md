@@ -6,6 +6,8 @@
 
 _GPT-SoVITS 对接插件（TTS）_
 
+**改版说明**：本仓库改自 Zhalslar 的 v3.1.0（原仓库已不存在），合成后端改成了 Fish Audio，并加了中日双语朗读等，改动见提交记录。
+
 [![License](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0.html)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![AstrBot](https://img.shields.io/badge/AstrBot-4.0%2B-orange.svg)](https://github.com/Soulter/AstrBot)
