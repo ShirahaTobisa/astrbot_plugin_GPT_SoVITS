@@ -31,7 +31,10 @@ def normalize_pause_tags(text: str, enabled: bool, marker: str = "<break time=10
     return re.sub(r"[、,，…]*(?:<break\b[^>]*>|\[break\])[、,，…]*", replace, text, flags=re.IGNORECASE)
 
 
-def normalize_fish_text(text: str) -> str:
+def normalize_fish_text(text: str, keep_tags: bool = True) -> str:
+    if not keep_tags:  # Fish 上存好的声音模型不加任何标记（用户试听过，不带更自然）；停顿改成逗号
+        text = re.sub(r"\[(?!break\])[A-Za-z][A-Za-z -]*\]", "", text)
+        return re.sub(r"([。、！？])、", lambda m: m.group(1), normalize_pause_tags(text, False)).strip()
     emotion = None
 
     def replace(match):
@@ -45,7 +48,9 @@ def normalize_fish_text(text: str) -> str:
 
     text = re.sub(r"\[([A-Za-z][A-Za-z -]*)\]", replace, text)
     text = normalize_pause_tags(text, True, marker="[break]").strip()
-    return f"[{emotion or 'soft tone'}]{text}" if text else ""
+    if not text:
+        return ""
+    return f"[{emotion}]{text}" if emotion else text  # 没写标记就用声音本来的语调，不再默认补 [soft tone]
 
 
 def normalize_wav(data: bytes) -> bytes:
@@ -184,20 +189,24 @@ class GSVApiClient:
                 return GSVRequestResult(False, error="Fish API key is required")
             if self.cfg.model not in {"s2-pro", "s2.1-pro", "s2.1-pro-free"}:
                 return GSVRequestResult(False, error="Select an explicit Fish S2 model, such as s2.1-pro-free")
-            if not params.get("ref_audio_path") or not params.get("prompt_text"):
-                return GSVRequestResult(False, error="Fish reference audio and transcript are required")
-            try:
-                reference = Path(params["ref_audio_path"]).read_bytes()
-            except OSError as exc:
-                return GSVRequestResult(False, error=f"Fish reference audio unavailable: {exc}")
-            text = normalize_fish_text(params.get("text", ""))
+            if self.cfg.voice_id:  # Fish 上存好的声音模型，填了就不用参考音频
+                voice = {"reference_id": self.cfg.voice_id}
+            elif not params.get("ref_audio_path") or not params.get("prompt_text"):
+                return GSVRequestResult(False, error="Fish voice ID, or reference audio and transcript, is required")
+            else:
+                try:
+                    voice = {"references": [{"audio": Path(params["ref_audio_path"]).read_bytes(), "text": params["prompt_text"]}]}
+                except OSError as exc:
+                    return GSVRequestResult(False, error=f"Fish reference audio unavailable: {exc}")
+            text = normalize_fish_text(params.get("text", ""), keep_tags=not self.cfg.voice_id)
+            logger.info(f"Fish 朗读：{text}")
             if not text:
                 return GSVRequestResult(False, error="Fish text is empty")
             return await self._request(
                 f"{self.base_url}/v1/tts", packed=True,
                 payload={
                     "text": text,
-                    "references": [{"audio": reference, "text": params["prompt_text"]}],
+                    **voice,
                     "format": "wav",
                     "temperature": params.get("temperature", 0.7),
                     "top_p": params.get("top_p", 0.7),
