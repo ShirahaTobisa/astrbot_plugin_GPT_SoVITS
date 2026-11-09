@@ -128,6 +128,7 @@ class PluginConfig(ConfigNode):
     enabled: bool
     auto: AutoConfig
     client: ClientConfig
+    persona_voices: list[dict[str, Any]] | None
     model: ModelConfig
     default_params: dict[str, Any]
     judge: JudgeConfig

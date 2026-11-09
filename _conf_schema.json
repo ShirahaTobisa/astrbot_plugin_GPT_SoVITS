@@ -96,9 +96,38 @@
                 "default": "sensenova-tts-2.0"
             },
             "voice_id": {
-                "description": "SenseAudio 音色编号",
+                "description": "音色编号",
                 "type": "string",
+                "hint": "Fish 填声音模型 ID，SenseAudio 填音色编号。用于「自动语音使用的人设」。",
                 "default": ""
+            }
+        }
+    },
+    "persona_voices": {
+        "description": "其他人设的音色",
+        "hint": "「自动语音使用的人设」用上面的音色和日语说话风格；这里再加别的人设，各用各的音色和日语说话风格。",
+        "type": "template_list",
+        "templates": {
+            "default": {
+                "name": "人设音色",
+                "items": {
+                    "persona_id": {
+                        "description": "人设名",
+                        "type": "string",
+                        "default": ""
+                    },
+                    "voice_id": {
+                        "description": "音色编号",
+                        "type": "string",
+                        "hint": "Fish 声音模型 ID，就是 fish.audio 声音页面网址里 modelId= 后面那串",
+                        "default": ""
+                    },
+                    "japanese_style_prompt": {
+                        "description": "日语说话风格",
+                        "type": "text",
+                        "default": ""
+                    }
+                }
             }
         }
     },

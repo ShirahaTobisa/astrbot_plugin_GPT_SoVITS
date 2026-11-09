@@ -70,19 +70,32 @@ class GPTSoVITSPlugin(Star):
         )
         return persona_id
 
+    def _voice_of(self, persona_id):
+        """这个人设念不念、用哪个音色和日语说话风格；不念返回 None。音色为 None 时用客户端配置里的。"""
+        if not persona_id:
+            return None
+        if persona_id == self.cfg.auto.persona_id:
+            return {"voice_id": None, "style": self.cfg.auto.japanese_style_prompt}
+        for item in self.cfg.persona_voices or []:
+            if item.get("persona_id") == persona_id:
+                return {"voice_id": item.get("voice_id") or None, "style": item.get("japanese_style_prompt")}
+        return None
+
     @filter.event_message_type(filter.EventMessageType.ALL)
     async def prepare_bilingual_message(self, event: AstrMessageEvent):
         if not self.cfg.enabled or not self.cfg.auto.bilingual:
             return
         persona_id = await self._resolve_persona_id(event)
-        if persona_id == self.cfg.auto.persona_id:
+        if self._voice_of(persona_id):
             event.set_extra("enable_streaming", False)
 
     @filter.on_llm_request(priority=110)
     async def prepare_bilingual_request(self, event, req):
         selected = await self._resolve_persona_id(event, req.conversation) if self.cfg.enabled else None
-        active = self.cfg.enabled and selected == self.cfg.auto.persona_id
+        voice = self._voice_of(selected)
+        active = voice is not None
         event.set_extra("gsv_persona_active", active)
+        event.set_extra("gsv_persona_id", selected if active else None)
         event.set_extra("gsv_pending_reply", active and self.cfg.auto.bilingual)
         event.set_extra("gsv_japanese_text", None)
         event.set_extra("quill_worldbook_persona_id", selected if active and self.cfg.auto.bilingual else None)
@@ -106,7 +119,7 @@ class GPTSoVITSPlugin(Star):
                 '工具调用过程中的进度不属于最终回复；不要给整个 JSON 加代码围栏。'
                 '不附加状态栏或剧情走向选项。以下日语语气、情绪与朗读要求只适用于陪聊的 ja 字段：'
             )
-            req.system_prompt += '\n\n' + (self.cfg.auto.japanese_style_prompt or '')
+            req.system_prompt += '\n\n' + (voice["style"] or '')
 
     @filter.on_using_llm_tool(priority=100)
     async def skip_task_speech(self, event, tool, tool_args):
@@ -142,7 +155,7 @@ class GPTSoVITSPlugin(Star):
                     response.completion_text = prefix
                 elif re.search(r"[぀-ヿ]", text):  # 没写 JSON、直接回了日语：日语留着朗读，翻成中文显示
                     event.set_extra("gsv_japanese_text", text)
-                    response.completion_text = await self._translate_to_chinese(text) or text
+                    response.completion_text = await self._translate_to_chinese(text, event.get_extra("gsv_persona_id")) or text
                 logger.debug("TTS 回复未按双语格式返回，将在发送语音前补译")
                 return
         if not isinstance(data, dict) or not isinstance(data.get("zh"), str) or not data["zh"].strip():
@@ -180,12 +193,12 @@ class GPTSoVITSPlugin(Star):
         unescape = lambda s: s.replace('\\"', '"').replace("\\n", "\n")
         return {"zh": unescape(m.group(1)), "ja": unescape(m.group(2)) if m.group(2) is not None else None}
 
-    async def _translate_to_chinese(self, text: str) -> str | None:
+    async def _translate_to_chinese(self, text: str, persona_id: str | None) -> str | None:
         logger.info(f"TTS 回复只有日语，翻成中文显示：日语 {len(text)} 字")
         try:
             async with asyncio.timeout(45):
                 try:
-                    persona_prompt = (await self.context.persona_manager.get_persona(self.cfg.auto.persona_id)).system_prompt
+                    persona_prompt = (await self.context.persona_manager.get_persona(persona_id)).system_prompt
                 except ValueError:
                     persona_prompt = ""
                 response = await self.context.llm_generate(
@@ -206,8 +219,10 @@ class GPTSoVITSPlugin(Star):
         try:
             async with asyncio.timeout(45):
                 provider_id = await self.context.get_current_chat_provider_id(event.unified_msg_origin)
+                persona_id = event.get_extra("gsv_persona_id") or self.cfg.auto.persona_id
+                style = (self._voice_of(persona_id) or {}).get("style")
                 try:
-                    persona_prompt = (await self.context.persona_manager.get_persona(self.cfg.auto.persona_id)).system_prompt
+                    persona_prompt = (await self.context.persona_manager.get_persona(persona_id)).system_prompt
                 except ValueError:
                     persona_prompt = ""
                 # 带上人设和对方的话，说清楚中文是"你"说的：不带这些时补译会把台词当成对方的话去回应
@@ -218,7 +233,7 @@ class GPTSoVITSPlugin(Star):
                         "请用你自己说日语的方式把你回的这句话说出来，用于语音朗读。"
                         "中文是你自己说的，不是对方说的，不要回应它，也不要增减意思，只把它换成日语。"
                         "只输出日语台词；如果这段话是列表、代码、链接、教程讲解之类的资料，不适合朗读，只输出 SKIP。"
-                        "\n\n" + persona_prompt + "\n\n" + (self.cfg.auto.japanese_style_prompt or "")
+                        "\n\n" + persona_prompt + "\n\n" + (style or "")
                     ),
                     prompt=f"对方刚才说：{event.message_str}\n\n你刚用中文回的话：{text}",
                 )
@@ -276,7 +291,8 @@ class GPTSoVITSPlugin(Star):
             active = event.get_extra("gsv_persona_active")
             if active is None:
                 persona_id = await self._resolve_persona_id(event)
-                active = persona_id == cfg.persona_id
+                active = self._voice_of(persona_id) is not None
+                event.set_extra("gsv_persona_id", persona_id)
             if not active:
                 return
         if random.random() > cfg.tts_prob:
@@ -314,7 +330,8 @@ class GPTSoVITSPlugin(Star):
 
         try:
             params = await self._get_emotion_params(event, combined_text)
-            res = await self.service.inference(combined_text, extra_params=params)
+            voice = self._voice_of(event.get_extra("gsv_persona_id")) or {}
+            res = await self.service.inference(combined_text, extra_params=params, voice_id=voice.get("voice_id"))
             if not res:
                 logger.warning("TTS 合成未成功，已保留文字")
                 return

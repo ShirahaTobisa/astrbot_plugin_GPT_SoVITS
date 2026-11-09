@@ -38,6 +38,7 @@ class GPTSoVITSService:
         self,
         text: str,
         extra_params: dict[str, Any] | None = None,
+        voice_id: str | None = None,
     ) -> GSVRequestResult:
         """TTS 推理"""
         params = self.default_params.copy()
@@ -50,6 +51,8 @@ class GPTSoVITSService:
             }
             params.update(filtered_params)
             logger.debug(f"已更新已有参数: {filtered_params}")
+        if voice_id:  # 别的人设用自己的音色；放进参数里，缓存也按音色分开
+            params["voice_id"] = voice_id
 
         cached_audio = self.local_data.get_cached_audio(params)
         if cached_audio:

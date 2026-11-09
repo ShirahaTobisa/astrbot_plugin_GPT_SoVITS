@@ -184,13 +184,14 @@ class GSVApiClient:
         )
 
     async def tts(self, params: dict) -> GSVRequestResult:
+        voice_id = params.get("voice_id") or self.cfg.voice_id  # 人设自己的音色优先
         if self.cfg.backend == "fish":
             if not self.cfg.api_key:
                 return GSVRequestResult(False, error="Fish API key is required")
             if self.cfg.model not in {"s2-pro", "s2.1-pro", "s2.1-pro-free"}:
                 return GSVRequestResult(False, error="Select an explicit Fish S2 model, such as s2.1-pro-free")
-            if self.cfg.voice_id:  # Fish 上存好的声音模型，填了就不用参考音频
-                voice = {"reference_id": self.cfg.voice_id}
+            if voice_id:  # Fish 上存好的声音模型，填了就不用参考音频
+                voice = {"reference_id": voice_id}
             elif not params.get("ref_audio_path") or not params.get("prompt_text"):
                 return GSVRequestResult(False, error="Fish voice ID, or reference audio and transcript, is required")
             else:
@@ -198,7 +199,7 @@ class GSVApiClient:
                     voice = {"references": [{"audio": Path(params["ref_audio_path"]).read_bytes(), "text": params["prompt_text"]}]}
                 except OSError as exc:
                     return GSVRequestResult(False, error=f"Fish reference audio unavailable: {exc}")
-            text = normalize_fish_text(params.get("text", ""), keep_tags=not self.cfg.voice_id)
+            text = normalize_fish_text(params.get("text", ""), keep_tags=not voice_id)
             logger.info(f"Fish 朗读：{text}")
             if not text:
                 return GSVRequestResult(False, error="Fish text is empty")
@@ -214,9 +215,9 @@ class GSVApiClient:
                     "latency": "normal",
                 },
             )
-        params = {**params, "text": normalize_pause_tags(params.get("text", ""), self.cfg.backend == "senseaudio")}
+        params = {k: v for k, v in params.items() if k != "voice_id"} | {"text": normalize_pause_tags(params.get("text", ""), self.cfg.backend == "senseaudio")}
         if self.cfg.backend == "senseaudio":
-            if not self.cfg.api_key or not self.cfg.voice_id:
+            if not self.cfg.api_key or not voice_id:
                 return GSVRequestResult(False, error="SenseAudio API key and voice ID are required")
             return await self._request(
                 f"{self.base_url}/v1/t2a_v2",
@@ -224,7 +225,7 @@ class GSVApiClient:
                     "model": self.cfg.model,
                     "text": params.get("text", ""),
                     "stream": False,
-                    "voice_setting": {"voice_id": self.cfg.voice_id, "speed": params.get("speed_factor", 1.0), "vol": 1, "pitch": 0},
+                    "voice_setting": {"voice_id": voice_id, "speed": params.get("speed_factor", 1.0), "vol": 1, "pitch": 0},
                     "audio_setting": {"format": "wav", "sample_rate": 32000, "channel": 1},
                 },
             )
