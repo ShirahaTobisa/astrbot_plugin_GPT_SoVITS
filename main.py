@@ -77,8 +77,8 @@ class GPTSoVITSPlugin(Star):
         if persona_id == self.cfg.auto.persona_id:
             return {"voice_id": None, "style": self.cfg.auto.japanese_style_prompt}
         for item in self.cfg.persona_voices or []:
-            if item.get("persona_id") == persona_id:
-                return {"voice_id": item.get("voice_id") or None, "style": item.get("japanese_style_prompt")}
+            if item.get("persona_id") == persona_id and item.get("voice_id"):  # 还没填音色的先不念，免得借用默认音色
+                return {"voice_id": item["voice_id"], "style": item.get("japanese_style_prompt")}
         return None
 
     @filter.event_message_type(filter.EventMessageType.ALL)
