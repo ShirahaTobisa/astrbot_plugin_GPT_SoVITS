@@ -21,9 +21,15 @@ from .core.local_data import LocalDataManager
 from .core.service import GPTSoVITSService
 
 
-# 用了这些办事工具（电脑操作、文件、执行代码都以 astrbot_ 开头，加上读网页）这一轮才只发文字；
+# 用了这些办事工具（电脑操作、文件、执行代码都以 astrbot_ 开头，加上读网页）这一轮默认只发文字，
+# 除非她最后回的是陪聊短句（见 chatty）；
 # 记忆、生图、提醒、搜索、B 站这类陪聊里顺手用的工具照常朗读
 WEB_READ_TOOLS = {"tavily_extract_web_page", "firecrawl_extract_web_page", "exa_get_contents"}
+
+
+def chatty(zh: str) -> bool:
+    """用过办事工具的那一轮里，这句回复像不像陪聊：短，且不带代码、链接、文件路径。像就照样朗读。"""
+    return len(zh) <= 100 and not re.search(r"```|https?://|/[\w.-]+/|\\", zh)
 
 
 class GPTSoVITSPlugin(Star):
@@ -166,6 +172,10 @@ class GPTSoVITSPlugin(Star):
             return
         if isinstance(data.get("ja"), str) and data["ja"].strip():
             event.set_extra("gsv_japanese_text", data["ja"].strip())
+            # 走到这里还带着「只发文字」的标记，只可能是这一轮用过办事工具；她自己给了日语、话又像陪聊，就照样朗读
+            if event.get_extra("gsv_skip_tts") and chatty(response.completion_text):
+                logger.info("TTS 本轮用过任务工具，但回的是陪聊短句，照常朗读")
+                event.set_extra("gsv_skip_tts", False)
 
     async def _send_text_first(self, event, chain):
         """插件提前发文字会绕过 AstrBot 自己的分段，这里照它的分段设置切开再发。"""
