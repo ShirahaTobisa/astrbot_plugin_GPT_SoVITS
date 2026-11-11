@@ -94,6 +94,7 @@ class AutoConfig(ConfigNode):
     persona_id: str
     bilingual: bool
     japanese_style_prompt: str | None
+    direction_guide: str | None
     only_llm_result: bool
     tts_prob: float
     max_msg_len: int

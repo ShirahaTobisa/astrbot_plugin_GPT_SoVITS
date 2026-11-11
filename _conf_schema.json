@@ -26,6 +26,12 @@
                 "hint": "仅用于自动语音所选人设的日语生成和补译。留空使用通用日语。",
                 "default": ""
             },
+            "direction_guide": {
+                "description": "表演提示写法",
+                "type": "text",
+                "hint": "给模型看的说明：怎么在日语台词里写配音模型（如 Drama 3）听得懂的表演提示，所有人设共用。填了就加进提示词，台词里的提示原样交给配音；留空则不让写，台词里的标记照旧去掉。只对 fish_compat 生效。",
+                "default": ""
+            },
             "only_llm_result": {
                 "description": "只处理LLM结果",
                 "type": "bool",

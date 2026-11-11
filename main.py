@@ -126,6 +126,8 @@ class GPTSoVITSPlugin(Star):
                 '不附加状态栏或剧情走向选项。以下日语语气、情绪与朗读要求只适用于陪聊的 ja 字段：'
             )
             req.system_prompt += '\n\n' + (voice["style"] or '')
+            if self.cfg.auto.direction_guide and self.cfg.client.backend == "fish_compat":
+                req.system_prompt += '\n\n' + self.cfg.auto.direction_guide
 
     @filter.on_using_llm_tool(priority=100)
     async def skip_task_speech(self, event, tool, tool_args):

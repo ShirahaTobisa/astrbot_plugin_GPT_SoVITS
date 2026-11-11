@@ -110,6 +110,7 @@ class GSVApiClient:
 
     def __init__(self, config: PluginConfig):
         self.cfg = config.client
+        self.keep_directions = bool(config.auto.direction_guide)  # 让模型写表演提示时，台词原样交给配音
         self.base_url = self.cfg.base_url.rstrip("/")
         self.gpt_url = f"{self.base_url}/set_gpt_weights"
         self.sovits_url = f"{self.base_url}/set_sovits_weights"
@@ -204,7 +205,8 @@ class GSVApiClient:
         if self.cfg.backend == "fish_compat":  # Fish 的兼容接口（官方 /compat/v1/audio/speech 同款），自建中转收的是它
             if not (self.cfg.api_key and self.cfg.model and voice_id):
                 return GSVRequestResult(False, error="Fish compat needs API key, model and voice ID")
-            text = normalize_fish_text(params.get("text", ""), keep_tags=False)
+            raw = params.get("text", "")
+            text = raw.strip() if self.keep_directions else normalize_fish_text(raw, keep_tags=False)
             logger.info(f"Fish 朗读：{text}")
             if not text:
                 return GSVRequestResult(False, error="Fish text is empty")
