@@ -64,7 +64,8 @@
             "backend": {
                 "description": "语音服务",
                 "type": "string",
-                "options": ["gpt_sovits", "senseaudio", "fish"],
+                "options": ["gpt_sovits", "senseaudio", "fish", "fish_compat"],
+                "hint": "fish 直连 Fish 官方；fish_compat 走 Fish 的兼容接口（/compat/v1/audio/speech），自建中转用它，只念填了音色编号的人设。",
                 "default": "gpt_sovits"
             },
             "base_url": {
@@ -92,7 +93,7 @@
             "model": {
                 "description": "云端语音合成模型",
                 "type": "string",
-                "hint": "Fish 免费模型填写 s2.1-pro-free；商汤填写 sensenova-tts-2.0。",
+                "hint": "Fish 免费模型填写 s2.1-pro-free；fish_compat 填中转上的模型名，如 drama-3；商汤填写 sensenova-tts-2.0。",
                 "default": "sensenova-tts-2.0"
             },
             "voice_id": {

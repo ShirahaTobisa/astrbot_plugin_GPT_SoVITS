@@ -67,6 +67,19 @@ def normalize_wav(data: bytes) -> bytes:
     return output.getvalue()
 
 
+def pcm_to_wav(pcm: bytes, rate: int) -> bytes:
+    # 兼容接口回的是没有文件头的声音数据（16 位单声道），补成 QQ 能发的 WAV
+    if not pcm or len(pcm) % 2:
+        raise ValueError("Fish returned empty or incomplete PCM audio")
+    output = io.BytesIO()
+    with wave.open(output, "wb") as target:
+        target.setnchannels(1)
+        target.setsampwidth(2)
+        target.setframerate(rate)
+        target.writeframes(pcm)
+    return output.getvalue()
+
+
 @dataclass
 class GSVRequestResult:
     ok: bool
@@ -116,6 +129,7 @@ class GSVApiClient:
         params: dict | None = None,
         payload: dict | None = None,
         packed: bool = False,
+        pcm_rate: int = 0,
     ) -> GSVRequestResult:
         request_text = str((payload or params or {}).get("text", ""))
         if params:
@@ -143,7 +157,9 @@ class GSVApiClient:
                         text=request_text,
                     )
 
-                if payload is None or packed:
+                if pcm_rate:
+                    audio = pcm_to_wav(await resp.read(), pcm_rate)
+                elif payload is None or packed:
                     audio = await resp.read()
                     if packed and (audio[:4] != b"RIFF" or audio[8:12] != b"WAVE"):
                         return GSVRequestResult(False, error="Fish returned invalid WAV audio", text=request_text)
@@ -185,6 +201,23 @@ class GSVApiClient:
 
     async def tts(self, params: dict) -> GSVRequestResult:
         voice_id = params.get("voice_id") or self.cfg.voice_id  # 人设自己的音色优先
+        if self.cfg.backend == "fish_compat":  # Fish 的兼容接口（官方 /compat/v1/audio/speech 同款），自建中转收的是它
+            if not (self.cfg.api_key and self.cfg.model and voice_id):
+                return GSVRequestResult(False, error="Fish compat needs API key, model and voice ID")
+            text = normalize_fish_text(params.get("text", ""), keep_tags=False)
+            logger.info(f"Fish 朗读：{text}")
+            if not text:
+                return GSVRequestResult(False, error="Fish text is empty")
+            return await self._request(
+                f"{self.base_url}/compat/v1/audio/speech", pcm_rate=44100,  # 网页额度只给 mp3 / pcm；pcm 实测是 44.1k
+                payload={
+                    "model": self.cfg.model,
+                    "input": text,
+                    "voice": voice_id,
+                    "response_format": "pcm",
+                    "speed": params.get("speed_factor", 1.0),
+                },
+            )
         if self.cfg.backend == "fish":
             if not self.cfg.api_key:
                 return GSVRequestResult(False, error="Fish API key is required")
